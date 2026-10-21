@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CROSSPLAT IDE</title>
+    <!-- Fontes e Ícones -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Script do Monaco Editor -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/loader.min.js"></script>
+    
+    <style>
+        /* CSS Unificado - Variáveis e Resets */
+        :root {
+            --bg-primary: #121212;
+            --bg-secondary: #181818;
+            --bg-tertiary: #1e1e1e;
+            --border-color: #333;
+            --accent-blue: #60a5fa;
+            --accent-hover: #3b82f6;
+            --accent-green: #4ade80;
+            --text-main: #fff;
+            --text-muted: #888;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background: var(--bg-primary); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Sistema de Views (Telas) */
+        .view-section { display: none; height: 100%; width: 100%; flex-direction: column; }
+        .view-section.active { display: flex; }
+
+        /* Botões Globais */
+        .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: var(--accent-blue); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+        .btn-outline:hover { background: var(--bg-tertiary); }
+        
+        /* Inputs Globais */
+        input[type="text"], input[type="email"], input[type="password"] {
+            width: 100%; background: var(--bg-primary); border: 1px solid var(--border-color);
+            color: #fff; padding: 10px 12px; border-radius: 6px; outline: none; margin-top: 6px;
+        }
+        input:focus { border-color: var(--accent-blue); }
+        label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+
+        /* ========= TELA DE LOGIN ========= */
+        #login-view { justify-content: center; align-items: center; background: url('https://www.transparenttextures.com/patterns/cubes.png') var(--bg-primary); }
+        .auth-card { background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 40px; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .auth-logo { text-align: center; margin-bottom: 30px; font-size: 24px; font-weight: 700; display: flex; justify-content: center; align-items: center; gap: 10px; }
+        .auth-logo .circle { width: 16px; height: 16px; background: var(--accent-blue); border-radius: 50%; }
+
+        /* ========= TELA DASHBOARD ========= */
+        .topbar { height: 60px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; }
+        .dashboard-content { flex: 1; padding: 40px; overflow-y: auto; max-width: 1200px; margin: 0 auto; width: 100%; }
+        .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-top: 24px; }
+        .project-card { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; gap: 10px; }
+        .project-card:hover { border-color: var(--accent-blue); transform: translateY(-2px); }
+        .project-card h3 { font-size: 16px; margin: 0; }
+        .project-card p { font-size: 12px; color: var(--text-muted); }
+
+        /* ========= TELA IDE (Editor) ========= */
+        .ide-container { flex: 1; display: flex; overflow: hidden; }
+        .sidebar { width: 280px; background: var(--bg-secondary); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 12px 16px; color: #555; font-size: 10px; text-transform: uppercase; font-weight: bold; border-bottom: 1px solid #222; background: var(--bg-primary); letter-spacing: 0.5px; }
+        .file-tab { padding: 8px 16px; color: #999; cursor: pointer; display: flex; align-items: center; font-size: 13px; border-left: 3px solid transparent; transition: 0.2s; }
+        .file-tab:hover { background: #222; color: #fff; }
+        .file-tab.active { background: #2a2d2e; color: #fff; border-left-color: var(--accent-blue); }
+        .file-tab .material-symbols-outlined { font-size: 18px; margin-right: 8px; }
+        
+        .editor-main { flex: 1; display: flex; flex-direction: column; position: relative; }
+        .editor-toolbar { height: 40px; background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; padding: 0 16px; justify-content: space-between; }
+        #monaco-root { flex: 1; }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================== -->
+    <!-- TELA 1: LOGIN                                  -->
+    <!-- ============================================== -->
+    <div id="login-view" class="view-section active">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <div class="circle"></div> CROSSPLAT
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label>E-mail</label>
+                <input type="email" placeholder="usuario@ifsp.edu.br" value="teste@crossplat.com">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label>Senha</label>
+                <input type="password" placeholder="••••••••" value="123456">
+            </div>
+            <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" onclick="navigateTo('dashboard-view')">
+                Entrar no Sistema
+            </button>
+            <p style="text-align: center; margin-top: 15px; font-size: 12px; color: var(--text-muted);">
+                Não tem conta? <a href="#" style="color: var(--accent-blue);">Cadastre-se</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- TELA 2: DASHBOARD DE PROJETOS                  -->
+    <!-- ============================================== -->
+    <div id="dashboard-view" class="view-section">
+        <div class="topbar">
+            <div class="auth-logo" style="margin: 0; font-size: 18px;">
+                <div class="circle"></div> CROSSPLAT
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <span style="font-size: 13px; color: var(--text-muted);">Bem-vindo, Gabriel Rosin</span>
+                <button class="btn btn-outline" onclick="navigateTo('login-view')">Sair</button>
+            </div>
+        </div>
+        
+        <div class="dashboard-content">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Meus Projetos</h2>
+                <button class="btn btn-primary"><span class="material-symbols-outlined" style="font-size: 18px;">add</span> Novo Projeto</button>
+            </div>
+
+            <div class="project-grid">
+                <!-- Projeto 1 -->
+                <div class="project-card" onclick="openProject('E-commerce Multiplataforma')">
+                    <h3>E-commerce Multiplataforma</h3>
+                    <p>Criado em: 10/10/2026</p>
+                    <div style="display: flex; gap: 5px; margin-top: 10px;">
+                        <span style="background: #1e3a8a; color: #60a5fa; padding: 3px 8px; border-radius: 4px; font-size: 10px;">C#</span>
+                        <span style="background: #14532d; color: #4ade80; padding: 3px 8px; border-radius: 4px; font-size: 10px;">Java</span>
+                    </div>
+                </div>
+
+                <!-- Projeto 2 -->
+                <div class="project-card" onclick="openProject('App Gestão Escolar')">
+                    <h3>App Gestão Escolar</h3>
+                    <p>Criado em: 15/09/2026</p>
+                    <div style="display: flex; gap: 5px; margin-top: 10px;">
+                        <span style="background: #450a0a; color: #f87171; padding: 3px 8px; border-radius: 4px; font-size: 10px;">Swift</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- TELA 3: IDE (EDITOR)                           -->
+    <!-- ============================================== -->
+    <div id="ide-view" class="view-section">
+        <div class="topbar">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <button class="btn btn-outline" style="border:none; padding: 4px;" onclick="navigateTo('dashboard-view')">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </button>
+                <div id="ide-project-title" style="font-weight: 600; font-size: 14px;">Projeto</div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-outline">Salvar</button>
+                <button class="btn btn-primary" onclick="simulateBuild()">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">bolt</span> Compilar & Build
+                </button>
+            </div>
+        </div>
+
+        <div class="ide-container">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-header">Fontes do Projeto</div>
+                <div class="file-tab active" onclick="activateTab(this)">
+                    <span class="material-symbols-outlined" style="color:#60a5fa;">code</span> GPL.crossplat
+                </div>
+                <div class="file-tab" onclick="activateTab(this)">
+                    <span class="material-symbols-outlined" style="color:#facc15;">schema</span> datatypes.crossplat
+                </div>
+                <div class="file-tab" onclick="activateTab(this)">
+                    <span class="material-symbols-outlined" style="color:#4ade80;">rocket_launch</span> deploy.crossplat
+                </div>
+
+                <div class="sidebar-header" style="margin-top: 15px;">Plataformas Vinculadas</div>
+                <div class="file-tab" onclick="activateTab(this)">
+                    <span class="material-symbols-outlined" style="color:#666;">lock</span> CSharp_Backend.conf
+                </div>
+                <div class="file-tab" onclick="activateTab(this)">
+                    <span class="material-symbols-outlined" style="color:#666;">lock</span> Java_Android.conf
+                </div>
+
+                <div class="sidebar-header" style="margin-top: 15px; color: #4ade80;">Output (Gerado)</div>
+                <div id="output-list">
+                    <p style="padding: 16px; color: #444; font-size: 11px; text-align: center;">Execute o Build.</p>
+                </div>
+            </aside>
+
+            <!-- Editor Principal -->
+            <main class="editor-main">
+                <div class="editor-toolbar">
+                    <span style="font-size: 12px; color: #888; font-family: 'Fira Code', monospace;">GPL.crossplat</span>
+                    <span style="background: #1e3a8a; color: #60a5fa; padding: 2px 6px; border-radius: 3px; font-size: 9px; text-transform: uppercase; font-weight: bold;">Editável</span>
+                </div>
+                <div id="monaco-root"></div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Script de Controle de Telas e Inicialização -->
+    <script>
+        // Função de Navegação SPA Simples
+        function navigateTo(viewId) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+            
+            // Força redimensionamento do Monaco se a IDE for aberta
+            if (viewId === 'ide-view' && window.editorInstance) {
+                setTimeout(() => window.editorInstance.layout(), 100);
+            }
+        }
+
+        // Abre um projeto a partir do Dashboard
+        function openProject(title) {
+            document.getElementById('ide-project-title').textContent = title;
+            navigateTo('ide-view');
+            initMonacoIfNeeded();
+        }
+
+        // Ativação visual das abas na IDE
+        function activateTab(element) {
+            document.querySelectorAll('.file-tab').forEach(el => el.classList.remove('active'));
+            element.classList.add('active');
+            const filename = element.innerText.trim();
+            document.querySelector('.editor-toolbar span').textContent = filename;
+            
+            // Muda o conteúdo do editor baseado no arquivo mockado
+            if(window.editorInstance) {
+                if(filename.includes('GPL')) {
+                    window.editorInstance.setValue("class Produto {\n    id: int\n    nome: string\n    preco: float\n}\n\nclass Pedido {\n    data: string\n    total: float\n}");
+                } else if(filename.includes('datatypes')) {
+                    window.editorInstance.setValue("datatype int\ndatatype string\ndatatype float");
+                } else if(filename.includes('deploy')) {
+                    window.editorInstance.setValue("deploy MeuApp {\n    Produto: CSharp_Backend\n    Pedido: Java_Android\n}");
+                } else {
+                    window.editorInstance.setValue("// Arquivo de configuração " + filename);
+                }
+            }
+        }
+
+        // Simula o processo de build do Xtext
+        function simulateBuild() {
+            const btn = document.querySelector('button[onclick="simulateBuild()"]');
+            const icon = btn.querySelector('span');
+            btn.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px; animation: spin 1s linear infinite;">autorenew</span> Compilando...`;
+            
+            setTimeout(() => {
+                btn.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">bolt</span> Compilar & Build`;
+                const outputList = document.getElementById('output-list');
+                outputList.innerHTML = `
+                    <div class="file-tab" style="color: #4ade80;" onclick="activateTab(this)">
+                        <span class="material-symbols-outlined">description</span> Produto.cs
+                    </div>
+                    <div class="file-tab" style="color: #4ade80;" onclick="activateTab(this)">
+                        <span class="material-symbols-outlined">description</span> Pedido.java
+                    </div>
+                `;
+                alert("Build finalizado com sucesso! Código Java e C# gerados a partir do GPL.");
+            }, 1500);
+        }
+
+        // Inicializa o Monaco Editor (Apenas 1 vez)
+        function initMonacoIfNeeded() {
+            if (window.editorInstance) return;
+
+            require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
+            require(['vs/editor/editor.main'], function() {
+                window.editorInstance = monaco.editor.create(document.getElementById('monaco-root'), {
+                    value: "class Produto {\n    id: int\n    nome: string\n    preco: float\n}\n\nclass Pedido {\n    data: string\n    total: float\n}",
+                    language: 'javascript', // Usando syntax js como placeholder
+                    theme: 'vs-dark',
+                    automaticLayout: true,
+                    fontSize: 14,
+                    fontFamily: "'Fira Code', 'Consolas', monospace",
+                    minimap: { enabled: false },
+                    padding: { top: 15 }
+                });
+            });
+        }
+    </script>
+</body>
+</html>
