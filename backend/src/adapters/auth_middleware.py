@@ -4,10 +4,10 @@ Lê o cabeçalho "Authorization: Bearer <token>" e coloca o id do usuário em g.
 """
 from functools import wraps
 from flask import request, jsonify, g
-from src.domain.interfaces import TokenService
+from src.domain.token_service_port import TokenServicePort
 
 
-def make_auth_required(tokens: TokenService):
+def make_auth_required(tokens: TokenServicePort):
     def auth_required(view):
         @wraps(view)
         def wrapper(*args, **kwargs):
@@ -21,3 +21,4 @@ def make_auth_required(tokens: TokenService):
             return view(*args, **kwargs)
         return wrapper
     return auth_required
+
