@@ -1,56 +1,76 @@
-# Backend – Clean Architecture
+# Backend — CROSSPLAT IDE (Onion Architecture)
+
+Este backend segue a **Onion Architecture (Arquitetura Cebola)** com a regra da dependência estrita:
+**cada camada só importa das camadas anteriores (mais internas)**.
 
 ```
+Models -> Schemas -> Repositories -> Services -> Routes -> Infrastructure
+```
+
+## Estrutura de Pastas (`src/`)
+
+```text
 backend/
-├── app.py                                   # Composition Root: cria as implementações e injeta nos serviços
+├── app.py                                           # Composition Root (injeta todas as dependências)
 └── src/
-    ├── domain/                              # CAMADA 1 – Entidades e portas (Python puro)
-    │   ├── user_entity.py                   #   User
-    │   ├── project_entity.py                #   Project
-    │   ├── user_repository_port.py          #   UserRepositoryPort
-    │   ├── project_repository_port.py       #   ProjectRepositoryPort
-    │   ├── password_hasher_port.py          #   PasswordHasherPort
-    │   └── token_service_port.py            #   TokenServicePort
-    ├── use_cases/                           # CAMADA 2 – Regras da aplicação (RF01–RF04)
-    │   ├── register_user_service.py         #   RF01
-    │   ├── authenticate_user_service.py     #   RF02
-    │   ├── create_project_service.py        #   RF03
-    │   ├── list_projects_service.py         #   RF04
-    │   └── delete_project_service.py        #   RF04
-    ├── adapters/                            # CAMADA 3 – Tradução entre o mundo externo e os serviços
-    │   ├── auth_controller.py               #   HTTP -> serviço -> HTTP (RF01, RF02)
-    │   ├── project_controller.py            #   HTTP -> serviço -> HTTP (RF03, RF04)
-    │   ├── auth_middleware.py               #   Validação do JWT
-    │   ├── postgres_query_helper.py         #   run_query (executa SQL)
-    │   ├── postgres_user_repository_adapter.py
-    │   └── postgres_project_repository_adapter.py
-    └── infrastructure/                      # CAMADA 4 – Detalhes técnicos
-        ├── postgres_connection.py           #   Conexão psycopg2
-        ├── werkzeug_password_hasher_service.py  # Hash de senha (Werkzeug)
-        └── jwt_token_service.py             #   JWT (PyJWT)
+    ├── models/                                      # Camada 1: Entidades e validações de domínio (Python puro)
+    │   ├── user.py                                  # User (RF01, RF02)
+    │   ├── project.py                               # Project com gpl_code, datatype_def, global_functions, deploy_model (RF03–RF09)
+    │   ├── language.py                              # Language (RF08)
+    │   ├── platform_model.py                        # PlatformModel + validação de estrutura protegida (RF07, RF08)
+    │   └── generated_file.py                        # GeneratedFile (RF10)
+    ├── schemas/                                     # Camada 2: DTOs de entrada e saída (Python puro + models)
+    │   ├── register_user_schema.py                  # RegisterUserSchema
+    │   ├── login_schema.py                          # LoginSchema
+    │   ├── create_project_schema.py                 # CreateProjectSchema
+    │   ├── update_project_schema.py                 # UpdateProjectSchema (RF05, RF09)
+    │   ├── create_platform_model_schema.py          # CreatePlatformModelSchema (RF08)
+    │   ├── update_platform_model_schema.py          # UpdatePlatformModelSchema (RF05, RF08)
+    │   ├── link_platform_model_schema.py            # LinkPlatformModelSchema (RF07)
+    │   ├── user_response_schema.py                  # UserResponseSchema (nunca expõe senha)
+    │   ├── auth_response_schema.py                  # AuthResponseSchema
+    │   ├── project_response_schema.py               # ProjectResponseSchema
+    │   ├── project_detail_response_schema.py        # ProjectDetailResponseSchema (RF06)
+    │   ├── platform_model_response_schema.py        # PlatformModelResponseSchema (RF07, RF08)
+    │   ├── language_response_schema.py              # LanguageResponseSchema (RF08)
+    │   └── build_response_schema.py                 # BuildResponseSchema (RF10)
+    ├── repositories/                                # Camada 3: Interfaces (contratos) de persistência
+    │   ├── i_user_repository.py                     # IUserRepository
+    │   ├── i_project_repository.py                  # IProjectRepository
+    │   ├── i_platform_model_repository.py           # IPlatformModelRepository
+    │   └── i_language_repository.py                 # ILanguageRepository
+    ├── services/                                    # Camada 4: Casos de uso e interfaces de serviços
+    │   ├── i_password_hasher.py                     # IPasswordHasher
+    │   ├── i_token_service.py                       # ITokenService
+    │   ├── i_code_generator_service.py              # ICodeGeneratorService (RF10)
+    │   ├── register_user_service.py                 # RegisterUserService (RF01)
+    │   ├── authenticate_user_service.py             # AuthenticateUserService (RF02)
+    │   ├── create_project_service.py                # CreateProjectService (RF03)
+    │   ├── list_projects_service.py                 # ListProjectsService (RF04)
+    │   ├── delete_project_service.py                # DeleteProjectService (RF04)
+    │   ├── get_project_detail_service.py            # GetProjectDetailService (RF06)
+    │   ├── update_project_files_service.py          # UpdateProjectFilesService (RF05, RF09)
+    │   ├── search_platform_models_service.py        # SearchPlatformModelsService (RF07)
+    │   ├── create_platform_model_service.py         # CreatePlatformModelService (RF08)
+    │   ├── update_platform_model_service.py         # UpdatePlatformModelService (RF05, RF08)
+    │   ├── link_platform_model_service.py           # LinkPlatformModelService (RF07)
+    │   ├── unlink_platform_model_service.py         # UnlinkPlatformModelService (RF07)
+    │   ├── list_languages_service.py                # ListLanguagesService (RF08)
+    │   └── build_project_service.py                 # BuildProjectService (RF10)
+    ├── routes/                                      # Camada 5: Rotas HTTP Flask e Middleware
+    │   ├── auth_middleware.py                       # make_auth_required
+    │   ├── auth_routes.py                           # create_auth_routes (/api/auth)
+    │   ├── project_routes.py                        # create_project_routes (/api/projects)
+    │   ├── marketplace_routes.py                    # create_marketplace_routes (/api/marketplace)
+    │   └── language_routes.py                       # create_language_routes (/api/linguagens)
+    └── infrastructure/                              # Camada 6: Implementações concretas externas
+        ├── postgres_connection.py                   # get_connection + ensure_schema
+        ├── postgres_query_helper.py                 # run_query
+        ├── postgres_user_repository_adapter.py      # PostgresUserRepositoryAdapter(IUserRepository)
+        ├── postgres_project_repository_adapter.py   # PostgresProjectRepositoryAdapter(IProjectRepository)
+        ├── postgres_platform_model_repository_adapter.py # PostgresPlatformModelRepositoryAdapter(IPlatformModelRepository)
+        ├── postgres_language_repository_adapter.py  # PostgresLanguageRepositoryAdapter(ILanguageRepository)
+        ├── werkzeug_password_hasher_service.py      # WerkzeugPasswordHasherService(IPasswordHasher)
+        ├── jwt_token_service.py                     # JwtTokenService(ITokenService)
+        └── java_code_generator_service.py           # JavaCodeGeneratorService(ICodeGeneratorService)
 ```
-
-## Sufixos
-
-| Sufixo | Papel |
-|--------|-------|
-| `_entity` | Entidade de domínio |
-| `_port` | Contrato (interface) definido pelo domínio |
-| `_service` (use_cases) | Caso de uso |
-| `_adapter` | Implementação de uma porta na camada de adapters |
-| `_service` (infrastructure) | Implementação de uma porta usando biblioteca externa |
-| `_controller` / `_middleware` | Entrada HTTP |
-
-## Regra da Dependência
-
-```
-infrastructure / adapters  ──►  use_cases  ──►  domain
-```
-
-- `domain` não importa nada do projeto nem bibliotecas externas.
-- `use_cases` importa **somente** `domain` (as portas). Não conhece Flask, SQL ou JWT.
-- `adapters` e `infrastructure` implementam as portas do domínio.
-- `app.py` é o único arquivo que junta tudo (injeção de dependência).
-
-Para provar: troque o PostgreSQL por outro banco criando um novo adapter que implemente
-`UserRepositoryPort` / `ProjectRepositoryPort` e altere **apenas** `app.py`.
