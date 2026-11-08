@@ -24,10 +24,13 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Defina JWT_SECRET_KEY no arquivo .env}
       JWT_EXPIRES_HOURS: ${JWT_EXPIRES_HOURS:-24}
+      JAR_PATH: /generator/generator.jar
+      TEMP_BUILD_DIR: /tmp/crossplat_builds
     ports:
       - "5000:5000"
     volumes:
       - ./backend:/app
+      - ./generator:/generator
 
   frontend:
     build: ./frontend

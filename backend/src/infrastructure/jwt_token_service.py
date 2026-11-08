@@ -1,14 +1,14 @@
 """
-CAMADA 4 - INFRAESTRUTURA: JwtTokenService
-Implementa a porta TokenServicePort do domínio usando a biblioteca externa PyJWT.
+CAMADA 6 - INFRASTRUCTURE: JwtTokenService
+Implementa a interface ITokenService usando a biblioteca externa PyJWT.
 """
 from datetime import datetime, timedelta, timezone
 import jwt
-from src.domain.user_entity import User
-from src.domain.token_service_port import TokenServicePort
+from src.models.user import User
+from src.services.i_token_service import ITokenService
 
 
-class JwtTokenService(TokenServicePort):
+class JwtTokenService(ITokenService):
     def __init__(self, secret: str, expires_hours: int = 24):
         self.secret = secret
         self.expires_hours = expires_hours
@@ -28,4 +28,3 @@ class JwtTokenService(TokenServicePort):
             raise ValueError("Sessão expirada. Faça login novamente.")
         except jwt.InvalidTokenError:
             raise ValueError("Token inválido.")
-
