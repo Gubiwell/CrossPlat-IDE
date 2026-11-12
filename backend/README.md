@@ -12,6 +12,12 @@ Models -> Schemas -> Repositories -> Services -> Routes -> Infrastructure
 ```text
 backend/
 ├── app.py                                           # Composition Root (injeta todas as dependências)
+├── tests/                                           # Testes pytest com repositórios falsos em memória
+│   ├── conftest.py                                  # Fakes das interfaces (repositórios, hasher, token, gerador)
+│   ├── test_architecture.py                         # Regra da dependência entre as camadas
+│   ├── test_auth.py                                 # RF01 e RF02
+│   ├── test_platforms.py                            # RF07 e RF08
+│   └── test_projects.py                             # RF03 a RF06 e RF10
 └── src/
     ├── models/                                      # Camada 1: Entidades e validações de domínio (Python puro)
     │   ├── user.py                                  # User (RF01, RF02)
@@ -74,3 +80,7 @@ backend/
         ├── jwt_token_service.py                     # JwtTokenService(ITokenService)
         └── java_code_generator_service.py           # JavaCodeGeneratorService(ICodeGeneratorService)
 ```
+
+## Testes
+
+Dentro de `backend/`: `pip install -r requirements-dev.txt` e depois `python -m pytest` (ou, com os containers rodando, `docker compose exec backend pip install -r requirements-dev.txt` e `docker compose exec backend python -m pytest`).

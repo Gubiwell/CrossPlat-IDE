@@ -17,7 +17,7 @@ A **CROSSPLAT IDE** permite criar modelos de software independentes de plataform
    - `deploy.crossplat` (`deploy_model`) — mapeamento entre classes e plataformas alvo.
 3. **Marketplace e Criação de Plataformas (RF07–RF08):** o usuário busca e vincula modelos de plataforma da comunidade ou cria seus próprios modelos em uma linguagem base cadastrada (`C++`, `CSharp`, `Dart`, `Java`, `JavaScript`, `Kotlin`, `Python`, `Swift`), com cabeçalho e fechamento protegidos (`platform <nome>: <linguagem> { ... }`).
 4. **Painel Visual de Deploy (RF09):** a aba visual lê automaticamente as classes (`class Nome {`) declaradas em `GPL.crossplat` e permite selecionar as plataformas vinculadas para cada classe, gerando o arquivo `deploy.crossplat` em tempo real.
-5. **Compilação & Build (RF10):** ao clicar em **Compilar & Build**, o backend prepara uma pasta temporária isolada por projeto, escreve `datatype.crossplat`, `global.crossplat` e concatena `deploy_model + gpl_code + plataformas vinculadas` em `gpl.crossplat`, executa o `generator.jar` via Java e devolve os arquivos gerados da pasta `saida/` para visualização na aba **Output**.
+5. **Compilação & Build (RF10):** ao clicar em **Compilar & Build**, o backend cria uma pasta temporária **única para aquele build** (`tempfile.mkdtemp` dentro de `TEMP_BUILD_DIR`), escreve `datatype.crossplat`, `global.crossplat` e concatena `deploy_model + gpl_code + plataformas vinculadas` em `gpl.crossplat`, executa o `generator.jar` via Java e devolve os arquivos gerados da pasta `saida/` para visualização na aba **Output**. Os arquivos gerados são lidos para a memória e a pasta do build é **apagada ao final**, com sucesso, erro ou timeout.
 
 ---
 
@@ -149,7 +149,15 @@ crossplat/
 │   ├── Dockerfile                                            # Python 3.11 + default-jre-headless (Java para RF10)
 │   ├── README.md                                             # Mapa detalhado das camadas do backend
 │   ├── requirements.txt                                      # Flask, Flask-Cors, psycopg2-binary, PyJWT
+│   ├── requirements-dev.txt                                  # pytest (dependência só para testes)
+│   ├── pytest.ini                                            # Configuração do pytest (pythonpath e pasta tests/)
 │   ├── app.py                                                # Composition Root + GET /api/health
+│   ├── tests/                                                # Testes automatizados (pytest)
+│   │   ├── conftest.py                                       # Repositórios e serviços FALSOS em memória
+│   │   ├── test_architecture.py                              # Regra da dependência entre as camadas
+│   │   ├── test_auth.py                                      # RF01 e RF02
+│   │   ├── test_platforms.py                                 # RF07 e RF08
+│   │   └── test_projects.py                                  # RF03 a RF06 e RF10
 │   └── src/
 │       ├── models/                                           # Camada 1: Entidades de domínio
 │       │   ├── user.py
@@ -289,6 +297,8 @@ Comandos úteis dentro do `psql`:
 SELECT id, nome, email, senha FROM usuarios;    -- confirma que a senha está salva como hash
 ```
 
+> ℹ️ **Nota:** a tabela é criada como `modelosPlataforma` sem aspas, então o PostgreSQL grava o nome em minúsculas (`modelosplataforma`). No `psql`, `\dt` mostra `modelosplataforma`; consultas sem aspas (`SELECT * FROM modelosPlataforma;`) funcionam, mas com aspas o nome precisa estar em minúsculas (`"modelosplataforma"`).
+
 > ⚠️ **Atenção:** executar `docker compose down -v` remove o volume `pgdata` e **apaga permanentemente todos os dados** do banco de dados.
 
 ---
@@ -344,6 +354,7 @@ Para parar e apagar também os dados do banco: `docker compose down -v`.
 - **Compilação / Geração de Código:** Java (`default-jre-headless`) executando `generator.jar` (Xtext).
 - **Banco de Dados:** PostgreSQL 16 (`psycopg2-binary`).
 - **Infraestrutura e Autenticação:** Docker / Docker Compose e JWT (Bearer Token).
+- **Testes:** pytest.
 
 ---
 
@@ -352,4 +363,66 @@ Para parar e apagar também os dados do banco: `docker compose down -v`.
 - **Senhas com hash:** [`WerkzeugPasswordHasherService`](backend/src/infrastructure/werkzeug_password_hasher_service.py) gera hash no `RegisterUserService`; a senha nunca é retornada nas respostas da API ([`UserResponseSchema`](backend/src/schemas/user_response_schema.py)).
 - **Autenticação JWT:** tokens assinados com `HS256` ([`JwtTokenService`](backend/src/infrastructure/jwt_token_service.py)) e exigidos pelo middleware `@auth_required` em todas as rotas de projetos, marketplace e linguagens.
 - **Isolamento de dono:** consultas, edições, vínculos e builds filtram por `usuario_id` do token (`WHERE id = %s AND usuario_id = %s`), e apenas o `criador_id` pode alterar o código de um modelo de plataforma.
-- **Build em diretório temporário:** cada compilação ocorre isolada em `/tmp/crossplat_builds/<project_id>` (removendo resíduos antes da execução) com timeout de 30 segundos.
+- **Build em diretório temporário:** cada compilação ocorre em uma pasta única criada com `tempfile.mkdtemp` dentro de `TEMP_BUILD_DIR` (`/tmp/crossplat_builds` no `docker-compose.yml`), o que isola builds simultâneos. A pasta é removida no `finally` de [`JavaCodeGeneratorService`](backend/src/infrastructure/java_code_generator_service.py), com sucesso, erro ou timeout, então o código do usuário não fica no disco. A execução do `generator.jar` tem timeout de 30 segundos.
+
+---
+
+## 9. Testes
+
+### Como rodar
+
+Localmente (requer Python 3.11):
+
+```powershell
+cd backend
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Via Docker, com a aplicação rodando (`docker compose up`):
+
+```powershell
+docker compose exec backend pip install -r requirements-dev.txt
+docker compose exec backend python -m pytest
+```
+
+### O que é testado
+
+- **Regras de negócio dos services (RF01 a RF08 e RF10):** [`test_auth.py`](backend/tests/test_auth.py) (RF01 e RF02), [`test_projects.py`](backend/tests/test_projects.py) (RF03 a RF06 e RF10) e [`test_platforms.py`](backend/tests/test_platforms.py) (RF07 e RF08) chamam os services diretamente.
+- **Sem PostgreSQL, Docker nem `generator.jar`:** [`conftest.py`](backend/tests/conftest.py) fornece repositórios e serviços **falsos em memória** (`FakeUserRepository`, `FakeProjectRepository`, `FakePlatformModelRepository`, `FakeLanguageRepository`, `FakePasswordHasher`, `FakeTokenService` e `FakeCodeGenerator`). Isso só é possível porque os services dependem de interfaces (`i_*.py`) e não das implementações concretas (inversão de dependência): os testes injetam os falsos no lugar dos adapters de `infrastructure/`.
+- **Arquitetura:** [`test_architecture.py`](backend/tests/test_architecture.py) lê os imports de cada arquivo de `src/` e falha se uma camada importar de uma camada mais externa (fora da sua lista permitida) ou se o núcleo (`models/`, `schemas/`, `repositories/`, `services/`) usar `flask`, `psycopg2`, `jwt`, `werkzeug`, `requests` ou `subprocess`.
+
+### O que NÃO é testado
+
+As rotas HTTP, o SQL real no PostgreSQL, o `generator.jar` e o frontend não têm testes automatizados; são validados manualmente.
+
+---
+
+## 10. Decisões de Arquitetura e Próximos Passos
+
+- **Redis / cache: não adotado.** O estado do editor já fica no React (digitar não gera requisição), cada ação faz no máximo 3 consultas ao banco e o resultado do build não se repete o suficiente para compensar um cache.
+- **Worker / fila para o build: não adotado.** Builds de projetos diferentes não conflitam, pois cada build tem sua própria pasta; a escala esperada é pequena.
+- **Pool de conexões: melhoria futura (issue #17).** Hoje `run_query` ([`postgres_query_helper.py`](backend/src/infrastructure/postgres_query_helper.py)) abre uma conexão nova por consulta. A mudança fica restrita à camada `infrastructure/`, sem alterar `services/` nem `routes/`.
+- **Gunicorn + Nginx: planejados para produção.** Hoje a aplicação usa o servidor de desenvolvimento do Flask.
+
+Como os services dependem apenas de interfaces, cada item acima pode ser adicionado criando uma nova classe em `infrastructure/` (por exemplo, uma interface `ICacheService` em `services/` com uma implementação Redis em `infrastructure/`) e injetando-a em [`backend/app.py`](backend/app.py), sem alterar a lógica dos services existentes.
+
+---
+
+## 11. Limitações Conhecidas
+
+- [`backend/app.py`](backend/app.py) executa com `debug=True` e `host="0.0.0.0"` (modo de desenvolvimento).
+- Um corpo JSON que não é objeto (por exemplo, uma lista) retorna erro 500 nas rotas que usam `request.get_json() or {}`.
+- `ensure_schema()` ignora silenciosamente qualquer erro na inicialização (`except Exception: pass` em `create_app`).
+- O endpoint de build (`POST /api/projects/<id>/build`) devolve a mensagem da exceção no campo `detalhes` nos erros internos.
+- Não há salvamento automático: o editor salva só no botão **Salvar** e antes do **Build**, sem aviso de alterações não salvas.
+- Não há pool de conexões, nem CI automático.
+
+---
+
+## 12. Fluxo de Contribuição
+
+1. Cada issue tem uma branch própria criada a partir do `main`, com prefixo pelo tipo: `docs/...`, `fix/...`, `feat/...` ou `test/...` (ex.: `fix/16-limpeza-pasta-build`).
+2. As alterações entram em um commit descritivo.
+3. Abre-se um Pull Request para o `main` com `Closes #N` na descrição, para que a issue feche sozinha no merge.
+4. O Pull Request fica como **Draft** até estar pronto para revisão.
