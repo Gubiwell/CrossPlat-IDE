@@ -365,11 +365,13 @@ export default function EditorView({ project, onBack }) {
     if (!confirm('Remover plataforma deste projeto?')) return;
     try {
       await api.delete(`/projects/${project.id}/model/${modelId}`);
-      const updated = await carregarProjeto();
+      // Remove só a plataforma do estado local, sem recarregar do banco,
+      // para não descartar edições ainda não salvas.
+      setLinkedPlatforms((prev) => prev.filter((p) => p.id !== modelId));
       if (activeKey === `plat_${modelId}`) {
         setActiveKey('gpl_code');
-      } else if (activeKey === 'deploy_model' && updated) {
-        const parsed = parseDeployState(updated.files.gpl_code, updated.files.deploy_model);
+      } else if (activeKey === 'deploy_model') {
+        const parsed = parseDeployState(projectFiles.gpl_code, projectFiles.deploy_model);
         setDeployClasses(parsed.classesEncontradas);
         setDeploySelections(parsed.selections);
       }
@@ -398,7 +400,21 @@ export default function EditorView({ project, onBack }) {
   async function handleLinkModel(modelId) {
     try {
       await api.post(`/projects/${project.id}/link_model`, { model_id: modelId });
-      await carregarProjeto();
+      // Busca o projeto, mas atualiza SOMENTE as plataformas vinculadas.
+      // Os arquivos do projeto (projectFiles) não são tocados, e as plataformas
+      // que já estavam na tela mantêm o código editado localmente.
+      try {
+        const { data } = await api.get(`/projects/${project.id}`);
+        const doBanco = data.modelos_vinculados || [];
+        setLinkedPlatforms((prev) => {
+          const idsNaTela = new Set(prev.map((p) => p.id));
+          const novas = doBanco.filter((p) => !idsNaTela.has(p.id));
+          return [...prev, ...novas];
+        });
+      } catch (err) {
+        if (err.response?.status === 401) logout();
+        else showToast(errorMessage(err, 'Erro ao carregar projeto.'), true);
+      }
       setShowMarketModal(false);
       showToast('Plataforma vinculada!');
     } catch (err) {
